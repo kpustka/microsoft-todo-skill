@@ -42,46 +42,46 @@ class MicrosoftTodo(MycroftSkill):
 
     def initialize(self):
         self.log.info('initialize')
-        cache = msal.SerializableTokenCache()
+        self.cache = msal.SerializableTokenCache()
 
         if os.path.exists('/home/pi/token_cache.bin'):
-            cache.deserialize(open('/home/pi/token_cache.bin', 'r').read())
+            self.cache.deserialize(open('/home/pi/token_cache.bin', 'r').read())
 
         #atexit.register(lambda: open('/home/pi/token_cache.bin', 'w').write(cache.serialize()) if cache.has_state_changed else None)
 
-        app = msal.PublicClientApplication(app_id, authority=AUTHORITY, token_cache=cache)
-
-        accounts = app.get_accounts()
+        self.app = msal.PublicClientApplication(app_id, authority=AUTHORITY, token_cache=self.cache)
+        token = self._get_token()
+        result = requests.get(f'{graph_url}/me', headers={'Authorization': 'Bearer ' + token})
+        result.raise_for_status()
+        self.log.info(result.json())
+ 
+    def _get_token(self):
+        accounts = self.app.get_accounts()
         result = None
         if len(accounts) > 0:
-            result = app.acquire_token_silent(SCOPES, account=accounts[0])
+            result = self.app.acquire_token_silent(SCOPES, account=accounts[0])
 
         if result is None:
-            flow = app.initiate_device_flow(scopes=SCOPES)
+            flow = self.app.initiate_device_flow(scopes=SCOPES)
             if 'user_code' not in flow:
                 raise Exception('Failed to create device flow')
 
             self.log.info(flow['message'])
 
-            result = app.acquire_token_by_device_flow(flow)
+            result = self.app.acquire_token_by_device_flow(flow)
 
         if 'access_token' in result:
-            global token 
-            token = result['access_token']
-            self.log.info('Token: ' + token)
-            result = requests.get(f'{graph_url}/me', headers={'Authorization': 'Bearer ' + result['access_token']})
-            result.raise_for_status()
-            self.log.info(result.json())
-            self.log.info(cache)
-            open('/home/pi/token_cache.bin', 'w').write(cache.serialize())
+            open('/home/pi/token_cache.bin', 'w').write(self.cache.serialize())
+            return result['access_token']
+
         else:
-            raise Exception('no access token in result')
+            raise Exception('no access token in result')        
 
     @intent_file_handler('todo.microsoft.intent')
     def handle_todo_microsoft(self, message):
         item = message.data.get('item')
         if item is not None:
-            global token
+            token = self._get_token()
             headers = {
                 'Authorization': 'Bearer ' + token
             }
