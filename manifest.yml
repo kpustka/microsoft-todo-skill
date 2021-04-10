@@ -9,8 +9,6 @@ dependencies:
    python:
      - requests
      - msal
-     - json
-     - os
 #     - gensim
 #
 #   # Install packages with the system package manager
